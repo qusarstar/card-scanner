@@ -8,7 +8,7 @@ export const maxDuration = 30;
 export async function POST(request) {
   try {
     // 驗證使用者已登入
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: '請先登入' }, { status: 401 });
