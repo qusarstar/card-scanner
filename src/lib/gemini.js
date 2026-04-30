@@ -40,7 +40,7 @@ export async function extractCardFromImage(base64Image, mimeType = 'image/jpeg')
 - **secondary_titles**：名片上**現任的**其他兼職、委員、顧問等（例如「教育部牙醫教育組召集人」、「世界吞嚥障礙高峰會委員」）
 - **past_experience**：含「前」、「曾任」、「前任」等字眼的職務歸到這（例如「東南亞牙醫教育學會前會長」）
 - **phone**：辦公室室話（02、03、04 等開頭）
-- **mobile**：09 開頭的手機，**特別注意手寫**的數字
+- **mobile**：09 開頭的手機，**特別注意手寫**的數字。台灣手機格式固定為 **10 碼**（09XX-XXX-XXX），辨識完務必檢查總共是 10 碼，不要多讀或少讀數字
 - **fax**：傳真號碼
 - 一張名片如果同時有室話、手機、傳真，要分別放到對應欄位，不要全部塞 phone
 - notes 留空字串，不要把頭銜或經歷塞進去
@@ -73,14 +73,14 @@ export async function analyzeContacts(cards, userBusiness = '') {
   const prompt = `你是一位資深的業務開發顧問。
 
 ${userBusiness ? `使用者的業務領域：${userBusiness}\n` : ''}
-這是使用者的名片聯絡人清單：
+這是使用者**目前所有**的名片聯絡人清單（共 ${cardSummary.length} 張）：
 ${JSON.stringify(cardSummary, null, 2)}
 
 請分析這些聯絡人，回傳純 JSON：
 {
   "top_prospects": [
     {
-      "id": "聯絡人 id",
+      "id": "必須是上面清單裡某張名片的真實 id",
       "score": 0-100 整數,
       "reason": "為何是潛在客戶（一句話）",
       "follow_up": "具體跟進建議（包含時機、管道、話題、開場白範例）",
@@ -88,11 +88,15 @@ ${JSON.stringify(cardSummary, null, 2)}
     }
   ],
   "industry_insights": "從聯絡人組成看出的行業趨勢觀察（2-3 句）",
-  "action_items": ["本週應做的 3-5 個具體行動"]
+  "action_items": ["本週應做的具體行動，每一項都必須對應到上面清單裡的真實聯絡人"]
 }
 
-規則：
-- top_prospects 至少回傳 3 個，最多 8 個，依分數排序
+**極為重要的規則（違反就是嚴重錯誤）：**
+- ⚠️ **絕對禁止編造任何人名、公司名、職稱**。所有提到的人、公司、職位都必須**逐字**來自上面提供的名片清單
+- ⚠️ top_prospects 的 id 必須是上面清單裡實際存在的 id，不可虛構
+- ⚠️ action_items 裡每一項提到的人名都必須是清單裡真實存在的人
+- top_prospects 數量 **不超過清單總數**（目前清單只有 ${cardSummary.length} 張，所以最多 ${cardSummary.length} 個）
+- 如果清單很少，就少給幾個建議，**寧可少也不要編**
 - follow_up 要具體可執行，包含實際話術
 - 不要任何 markdown 或說明文字，只回傳 JSON`;
 
