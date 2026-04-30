@@ -8,9 +8,11 @@ import BottomNav from '@/components/BottomNav';
 const FIELDS = [
   { key: 'name', label: '姓名', icon: '👤' },
   { key: 'company', label: '公司', icon: '🏢' },
-  { key: 'title', label: '職稱', icon: '💼' },
+  { key: 'title', label: '主要職位', icon: '💼' },
   { key: 'email', label: 'Email', icon: '✉️', type: 'email' },
-  { key: 'phone', label: '電話', icon: '📞', type: 'tel' },
+  { key: 'phone', label: '電話（室話）', icon: '📞', type: 'tel' },
+  { key: 'mobile', label: '手機', icon: '📱', type: 'tel' },
+  { key: 'fax', label: '傳真', icon: '📠', type: 'tel' },
   { key: 'address', label: '地址', icon: '📍' },
   { key: 'website', label: '網站', icon: '🌐', type: 'url' },
   { key: 'industry', label: '行業', icon: '🏭' },
@@ -22,7 +24,7 @@ export default function ScanPage() {
   const router = useRouter();
   const fileInputRef = useRef(null);
 
-  const [step, setStep] = useState('start'); // 'start' | 'scanning' | 'review' | 'saving'
+  const [step, setStep] = useState('start');
   const [imageBase64, setImageBase64] = useState(null);
   const [imageBlob, setImageBlob] = useState(null);
   const [fields, setFields] = useState({});
@@ -48,7 +50,7 @@ export default function ScanPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: base64.split(',')[1], // remove data:image/...;base64,
+          image: base64.split(',')[1],
           mimeType: file.type || 'image/jpeg',
         }),
       });
@@ -71,6 +73,28 @@ export default function ScanPage() {
     setFields((prev) => ({ ...prev, [key]: value }));
   }
 
+  function updateListItem(listKey, index, value) {
+    setFields((prev) => {
+      const list = [...(prev[listKey] || [])];
+      list[index] = value;
+      return { ...prev, [listKey]: list };
+    });
+  }
+
+  function addListItem(listKey) {
+    setFields((prev) => ({
+      ...prev,
+      [listKey]: [...(prev[listKey] || []), ''],
+    }));
+  }
+
+  function removeListItem(listKey, index) {
+    setFields((prev) => ({
+      ...prev,
+      [listKey]: (prev[listKey] || []).filter((_, i) => i !== index),
+    }));
+  }
+
   async function handleSave() {
     if (!fields.name && !fields.company) {
       setError('至少需要填寫姓名或公司');
@@ -84,7 +108,6 @@ export default function ScanPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('請先登入');
 
-      // 1. 上傳圖片到 Supabase Storage
       let imageUrl = null;
       if (imageBlob) {
         const filename = `${user.id}/${Date.now()}.jpg`;
@@ -98,14 +121,17 @@ export default function ScanPage() {
         }
       }
 
-      // 2. 寫入資料庫
       const { error: dbError } = await supabase.from('cards').insert({
         user_id: user.id,
         name: fields.name || '',
         company: fields.company || '',
         title: fields.title || '',
+        secondary_titles: (fields.secondary_titles || []).filter((t) => t && t.trim()),
+        past_experience: (fields.past_experience || []).filter((t) => t && t.trim()),
         email: fields.email || '',
         phone: fields.phone || '',
+        mobile: fields.mobile || '',
+        fax: fields.fax || '',
         address: fields.address || '',
         website: fields.website || '',
         industry: fields.industry || '',
@@ -123,11 +149,8 @@ export default function ScanPage() {
     }
   }
 
-  // ── UI 階段 ─────────────────────────────────
   if (step === 'scanning') {
-    return (
-      <Loading title="AI 辨識中…" hint="Gemini 正在讀取名片，約 3–5 秒" image={imageBase64} />
-    );
+    return <Loading title="AI 辨識中…" hint="Gemini 正在讀取名片，約 3–5 秒" image={imageBase64} />;
   }
 
   if (step === 'saving') {
@@ -159,32 +182,41 @@ export default function ScanPage() {
           </div>
         )}
 
+        {/* 基本欄位（姓名、公司、主要職位） */}
         <div className="bg-white mx-4 mt-4 rounded-2xl divide-y">
-          {FIELDS.map((f) => (
-            <div key={f.key} className="flex items-start px-4 py-3">
-              <div className="text-xl mr-3 mt-1">{f.icon}</div>
-              <div className="flex-1">
-                <p className="text-xs text-gray-500">{f.label}</p>
-                {f.multiline ? (
-                  <textarea
-                    value={fields[f.key] || ''}
-                    onChange={(e) => update(f.key, e.target.value)}
-                    placeholder={`輸入${f.label}`}
-                    rows={2}
-                    className="w-full mt-1 outline-none resize-none text-base"
-                  />
-                ) : (
-                  <input
-                    type={f.type || 'text'}
-                    value={fields[f.key] || ''}
-                    onChange={(e) => update(f.key, e.target.value)}
-                    placeholder={`輸入${f.label}`}
-                    autoCapitalize="none"
-                    className="w-full mt-1 outline-none text-base"
-                  />
-                )}
-              </div>
-            </div>
+          {FIELDS.slice(0, 3).map((f) => (
+            <FieldRow key={f.key} f={f} fields={fields} update={update} />
+          ))}
+        </div>
+
+        {/* 次要職位 */}
+        <ListSection
+          icon="🎖️"
+          label="次要職位（兼職、委員、顧問）"
+          listKey="secondary_titles"
+          fields={fields}
+          updateListItem={updateListItem}
+          addListItem={addListItem}
+          removeListItem={removeListItem}
+          placeholder="例如：教育部牙醫教育組召集人"
+        />
+
+        {/* 經歷 */}
+        <ListSection
+          icon="📜"
+          label="經歷（含「前」、「曾任」字眼）"
+          listKey="past_experience"
+          fields={fields}
+          updateListItem={updateListItem}
+          addListItem={addListItem}
+          removeListItem={removeListItem}
+          placeholder="例如：東南亞牙醫教育學會前會長"
+        />
+
+        {/* 其他欄位（聯絡方式 + 備註） */}
+        <div className="bg-white mx-4 mt-4 rounded-2xl divide-y">
+          {FIELDS.slice(3).map((f) => (
+            <FieldRow key={f.key} f={f} fields={fields} update={update} />
           ))}
         </div>
       </main>
@@ -236,9 +268,7 @@ export default function ScanPage() {
           className="hidden"
         />
 
-        {error && (
-          <p className="text-sm text-red-600 text-center px-4">❌ {error}</p>
-        )}
+        {error && <p className="text-sm text-red-600 text-center px-4">❌ {error}</p>}
 
         <p className="text-xs text-gray-400 text-center pt-6 leading-5 px-4">
           💡 拍攝時讓名片填滿畫面，光線充足效果最佳
@@ -247,6 +277,78 @@ export default function ScanPage() {
 
       <BottomNav />
     </main>
+  );
+}
+
+function FieldRow({ f, fields, update }) {
+  return (
+    <div className="flex items-start px-4 py-3">
+      <div className="text-xl mr-3 mt-1">{f.icon}</div>
+      <div className="flex-1">
+        <p className="text-xs text-gray-500">{f.label}</p>
+        {f.multiline ? (
+          <textarea
+            value={fields[f.key] || ''}
+            onChange={(e) => update(f.key, e.target.value)}
+            placeholder={`輸入${f.label}`}
+            rows={2}
+            className="w-full mt-1 outline-none resize-none text-base"
+          />
+        ) : (
+          <input
+            type={f.type || 'text'}
+            value={fields[f.key] || ''}
+            onChange={(e) => update(f.key, e.target.value)}
+            placeholder={`輸入${f.label}`}
+            autoCapitalize="none"
+            className="w-full mt-1 outline-none text-base"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ListSection({ icon, label, listKey, fields, updateListItem, addListItem, removeListItem, placeholder }) {
+  const list = fields[listKey] || [];
+  return (
+    <div className="bg-white mx-4 mt-4 rounded-2xl px-4 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center">
+          <span className="text-xl mr-3">{icon}</span>
+          <p className="text-xs text-gray-500">{label}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => addListItem(listKey)}
+          className="text-brand text-sm font-semibold"
+        >
+          + 新增
+        </button>
+      </div>
+      {list.length === 0 && (
+        <p className="text-sm text-gray-400 ml-9">無，可點「+ 新增」加入</p>
+      )}
+      <div className="ml-9 space-y-2">
+        {list.map((t, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={t}
+              onChange={(e) => updateListItem(listKey, i, e.target.value)}
+              placeholder={placeholder}
+              className="flex-1 px-2 py-1 bg-gray-100 rounded outline-none text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => removeListItem(listKey, i)}
+              className="text-red-500 text-sm px-2"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

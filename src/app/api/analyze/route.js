@@ -18,7 +18,7 @@ export async function POST(request) {
     // 取得這個使用者的所有名片
     const { data: cards, error: cardsError } = await supabase
       .from('cards')
-      .select('id, name, company, title, industry, notes, last_contact_date');
+      .select('id, name, company, title, secondary_titles, past_experience, industry, notes, last_contact_date');
 
     if (cardsError) throw cardsError;
     if (!cards || cards.length === 0) {
